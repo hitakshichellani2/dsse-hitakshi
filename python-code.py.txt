@@ -1,0 +1,62 @@
+# 1. Install PyDriller
+!pip install pydriller
+
+from pydriller import Repository
+import re
+
+# --- Configuration ---
+REPO_URL = "https://github.com/apache/tika"
+ISSUE_IDS = ["TIKA-6", "TIKA-172", "TIKA-605", "TIKA-1722", "TIKA-3523"]
+
+# Metrics Storage
+total_commits_count = 0
+total_files_changed = 0
+total_dmm_score = 0.0
+found_commits = []
+
+print(f"Starting analysis for {REPO_URL}...\n")
+
+# 2. Traverse Commits
+# We iterate through all commits and check if the message contains our Issue IDs
+for commit in Repository(REPO_URL).traverse_commits():
+    # Check if any of the Issue IDs are in the commit message
+    if any(issue_id in commit.msg for issue_id in ISSUE_IDS):
+        total_commits_count += 1
+        found_commits.append(commit.hash)
+        
+        # 1. Calculate Unique Files (Added, Modified, Deleted)
+        # modified_files contains objects representing each file in the commit
+        total_files_changed += len(commit.modified_files)
+        
+        # 2. Calculate DMM Metrics
+        # PyDriller provides DMM properties directly: unit_size, unit_complexity, unit_interfacing
+        # These are values from 0.0 to 1.0 (proportion of low-risk change)
+        # If a commit has no source code changes (e.g., only README), these may be None
+        dmm_metrics = [
+            commit.dmm_unit_size,
+            commit.dmm_unit_complexity,
+            commit.dmm_unit_interfacing
+        ]
+        
+        # Filter out None values and calculate average for this specific commit
+        valid_metrics = [m for m in dmm_metrics if m is not None]
+        if valid_metrics:
+            commit_avg_dmm = sum(valid_metrics) / len(valid_metrics)
+            total_dmm_score += commit_avg_dmm
+
+# 3. Final Calculations
+if total_commits_count > 0:
+    avg_files = total_files_changed / total_commits_count
+    avg_dmm = total_dmm_score / total_commits_count
+else:
+    avg_files = 0
+    avg_dmm = 0
+
+# --- Output ---
+print("-" * 30)
+print(f"RESULTS FOR {REPO_URL}")
+print("-" * 30)
+print(f"Total commits analyzed:    {total_commits_count}")
+print(f"Avg number of files changed: {avg_files:.2f}")
+print(f"Avg DMM metrics:           {avg_dmm:.4f}")
+print("-" * 30)
